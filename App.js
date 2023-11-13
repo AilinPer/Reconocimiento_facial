@@ -1,21 +1,22 @@
-import { StyleSheet,
+/* import { StyleSheet,
         Text,
         View,
         TouchableOpacity,
         Image } from 'react-native';
 import { Camera, CameraType } from 'expo-camera';
-import { Constants } from 'expo-constants';
 import * as MediaLibrary from 'expo-media-library';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useRef, useEffect, useState } from 'react';
 import Button from './src/components/button';
+import * as FaceDetector from 'expo-face-detector';
 
 export default function App() {
 
   const [hasCameraPermission, setHasCameraPermission] = useState(null)
   const [image, setImage] = useState(null)
-  const [type, setType] = useState(Camera.Constants.Type.back)
+  const [type, setType] = useState(Camera.Constants.Type.front)
   const [flash, setFlash] = useState(Camera.Constants.FlashMode.off)
+  const [faces, setFaces] = useState([])
   const cameraRef = useRef(null)
 
   useEffect(() => {
@@ -26,15 +27,30 @@ export default function App() {
     })()
   }, [])
 
+  const handleFacesDetected = ({ faces }) => {
+    setFaces(faces)
+  }
+
   const takePicture = async () => {
     if (cameraRef) {
       try {
         const data = await cameraRef.current.takePictureAsync()
         console.log(data)
         setImage(data.uri)
+        await detectFaces(data)
       } catch (e) {
         console.log(e)
       }
+    }
+  }
+
+  const detectFaces = async (data) => {
+    const options = { mode: FaceDetector.FaceDetectorMode.fast }
+    const result = await FaceDetector.detectFacesAsync(data, options)
+    if (result.faces.length > 0) {
+      console.log('Se detectaron cara en tiempo real: ', result.faces)
+    } else {
+      console.log('No se detectaron caras en tiempo real')
     }
   }
 
@@ -63,6 +79,14 @@ export default function App() {
           type={type}
           ref={cameraRef}
           flashMode={flash}
+          onFacesDetected={handleFacesDetected}
+          faceDetectorSettings={{
+            mode: FaceDetector.FaceDetectorMode.fast,
+            detectLandmarks: FaceDetector.FaceDetectorLandmarks.all,
+            runClassifications: FaceDetector.FaceDetectorClassifications.all,
+            minDetectionInterval: 100,
+            tracking: true,
+          }}
         >
           <View
             style={{
@@ -153,3 +177,155 @@ const styles = StyleSheet.create({
     flex: 1,
   },
 });
+ */
+
+/* import React, { useState, useEffect } from 'react';
+import { Text, View, TouchableOpacity } from 'react-native';
+import { Camera } from 'expo-camera';
+
+export default function App() {
+  const [hasPermission, setHasPermission] = useState(null);
+  const [type, setType] = useState(Camera.Constants.Type.back);
+
+  useEffect(() => {
+    (async () => {
+      const { status } = await Camera.requestCameraPermissionsAsync()
+      setHasPermission(status === 'granted');
+    })();
+  }, []);
+
+  if (hasPermission === null) {
+    return <View />;
+  }
+  if (hasPermission === false) {
+    return <Text>No se ha concedido el acceso a la cámara</Text>;
+  }
+  return (
+    <View style={{ flex: 1 }}>
+      <Camera style={{ flex: 1 }} type={type}>
+        <View
+          style={{
+            flex: 1,
+            backgroundColor: 'transparent',
+            flexDirection: 'row',
+          }}>
+          <TouchableOpacity
+            style={{
+              flex: 0.1,
+              alignSelf: 'flex-end',
+              alignItems: 'center',
+            }}
+            onPress={() => {
+              setType(
+                type === Camera.Constants.Type.back
+                  ? Camera.Constants.Type.front
+                  : Camera.Constants.Type.back
+              );
+            }}>
+            <Text style={{ fontSize: 18, marginBottom: 10, color: 'white' }}> Flip </Text>
+          </TouchableOpacity>
+        </View>
+      </Camera>
+    </View>
+  );
+}
+ */
+
+import React, { useState, useEffect, useRef } from 'react';
+import { Text, View, TouchableOpacity } from 'react-native';
+import { Camera } from 'expo-camera';
+import * as FaceDetector from 'expo-face-detector';
+import * as MediaLibrary from 'expo-media-library';
+import * as FileSystem from 'expo-file-system';
+import * as io from 'socket.io-client';
+
+const socket = io.connect('http://192.168.1.50:8081/logs');
+
+export default function App() {
+  const [hasPermission, setHasPermission] = useState(null);
+  const [type, setType] = useState(Camera.Constants.Type.back);
+  const [faces, setFaces] = useState([]);
+  const cameraRef = useRef()
+
+  useEffect(() => {
+    (async () => {
+      const { status } = await Camera.requestCameraPermissionsAsync();
+      setHasPermission(status === 'granted');
+    })();
+  }, []);
+
+  const handleFacesDetected = async ({ faces }) => {
+    setFaces(faces);
+  }
+
+  const takePicture = async () => {
+    if (cameraRef) {
+      try {
+        const data = await cameraRef.current.takePictureAsync();
+        console.log(data);
+
+        // Guarda la imagen en la galería
+        await MediaLibrary.saveToLibraryAsync(data.uri);
+
+        // Envía la ruta de la imagen al servidor de escritorio a través de sockets
+        socket.emit('send-image', { imagePath: data.uri });
+      } catch (error) {
+        console.error(error);
+      }
+    }
+  };
+
+  if (hasPermission === null) {
+    return <View />;
+  }
+  if (hasPermission === false) {
+    return <Text>No se ha concedido el acceso a la cámara</Text>;
+  }
+  return (
+    <View style={{ flex: 1 }}>
+      <Camera 
+        style={{ flex: 1 }} 
+        type={type}
+        ref={cameraRef}
+        onFacesDetected={handleFacesDetected}
+        faceDetectorSettings={{
+          mode: FaceDetector.FaceDetectorMode.fast,
+          detectLandmarks: FaceDetector.FaceDetectorLandmarks.all,
+          runClassifications: FaceDetector.FaceDetectorClassifications.all,
+          minDetectionInterval: 100,
+          tracking: true,
+        }}
+      >
+        <View
+          style={{
+            flex: 1,
+            backgroundColor: 'transparent',
+            flexDirection: 'row',
+          }}>
+          <TouchableOpacity
+            style={{
+              flex: 0.1,
+              alignSelf: 'flex-end',
+              alignItems: 'center',
+            }}
+            onPress={() => {
+              setType(
+                type === Camera.Constants.Type.back
+                  ? Camera.Constants.Type.front
+                  : Camera.Constants.Type.back
+              );
+            }}>
+            <Text style={{ fontSize: 18, marginBottom: 10, color: 'white' }}> Flip </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity style={{ alignSelf: 'flex-end', margin: 20 }} onPress={takePicture}>
+            <Text style={{ fontSize: 18, marginBottom: 10, color: 'white' }}> Tomar Foto </Text>
+          </TouchableOpacity>
+        </View>
+      </Camera>
+      {/* {faces.map((face, index) => (
+        <Text key={index}>Rostro detectado en las coordenadas: {JSON.stringify(face.bounds.origin)}</Text>
+      ))} */}
+    </View>
+  );
+}
